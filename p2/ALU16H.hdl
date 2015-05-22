@@ -1,0 +1,20 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/01/Or8Way.hdl
+
+/**
+ * 
+ * 
+ */
+
+CHIP ALU16H {
+    IN in[16],z,n;
+    OUT out[16];
+    PARTS:
+	  Not16(in=in, out=notin);
+	  And16(a=in, b=notin, out=zeroin);
+	  Not16(in=zeroin, out=onein);
+	  Mux4Way16(a=in, b=notin, c=zeroin, d=onein, sel[0]=n, sel[1]=z, out=out);
+	 
+}

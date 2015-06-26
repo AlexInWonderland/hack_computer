@@ -1,0 +1,68 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/05/CPU.hdl
+
+/**
+ * The Hack CPU (Central Processing unit), consisting of an ALU,
+ * two registers named A and D, and a program counter named PC.
+ * The CPU is designed to fetch and execute instructions written in 
+ * the Hack machine language. In particular, functions as follows:
+ * Executes the inputted instruction according to the Hack machine 
+ * language specification. The D and A in the language specification
+ * refer to CPU-resident registers, while M refers to the external
+ * memory location addressed by A, i.e. to Memory[A]. The inM input 
+ * holds the value of this location. If the current instruction needs 
+ * to write a value to M, the value is placed in outM, the address 
+ * of the target location is placed in the addressM output, and the 
+ * writeM control bit is asserted. (When writeM==0, any value may 
+ * appear in outM). The outM and writeM outputs are combinational: 
+ * they are affected instantaneously by the execution of the current 
+ * instruction. The addressM and pc outputs are clocked: although they 
+ * are affected by the execution of the current instruction, they commit 
+ * to their new values only in the next time step. If reset==1 then the 
+ * CPU jumps to address 0 (i.e. pc is set to 0 in next time step) rather 
+ * than to the address resulting from executing the current instruction. 
+ */
+
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS: 
+		Mux16(a[15]=false, a[0..14]=instruction[0..14], b=ALUout, sel=instruction[15], out=contoA); //if sel=1 a instruction else c instruction 
+		Mux(a=true, b=instruction[5], sel= instruction[15], out=inst5tmp);  //[CU]if A inst load bit of Aregister is 1, else depends on the d1 bit of c inst
+		ARegister(in=contoA, load=inst5tmp, out=outA, out[0..14]=addressM); //A
+		Mux(a=false,b=instruction[4],sel=instruction[15], out=inst4tmp);    //[CU]if inst a load bit of DRegister is 0 else depends opon d2 bit 
+		DRegister(in=ALUout, load=inst4tmp, out=outD);                      //D
+		Mux16(a=outA, b=inM, sel=instruction[12], out=AorM);                //A or M
+		ALU(x=outD,y=AorM, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=outM, out=ALUout, zr=AluZr, ng=AluNg);
+		Mux(a=false, b=instruction[3], sel=instruction[15], out=writeM);
+	    
+		Mux(a=false, b=instruction[2], sel=instruction[15], out=tmpless);  //[CU]if a ins output 0
+		And(a=tmpless, b=AluNg, out=less);
+		Mux(a=false, b=instruction[1], sel=instruction[15], out=tmpequal); //[CU]if a ins output 0
+		And(a=tmpequal, b=AluZr, out=equal);
+		Mux(a=false, b=instruction[0], sel=instruction[15], out=tmplgr);   //[CU]if a ins output 0
+		Mux(a=true, b=false, sel=AluNg, out=isGE);                         //[CU] if ng=1 out < 0 else >= 0    
+        Mux(a=true, b=false, sel=AluZr, out=isNotZero);                    //[CU] if zr=1 out=0 
+		And(a=isGE, b=isNotZero, out=isGreat);                             //[CU] if ng=0 and zr!=0 out>0
+		And(a=tmplgr, b=isGreat, out=lgr);
+		Or8Way(in[0..4]=false, in[5]=less, in[6]=equal, in[7]=lgr, out=pcload);
+		
+		Mux(a=true, b=false, sel=pcload, out=pcinctmpcond);                     //[CU]if condition failed pc++
+		Or8Way(in[0..4]=false, in[5]=instruction[2], in[6]=instruction[1], in[7]=instruction[0], out=jmpbitor);
+		Mux(a=true, b=pcinctmpcond, sel=jmpbitor, out=pcinctmp);                   // [CU]if all jump bits are 0 pc++
+		Mux(a=true, b=pcinctmp, sel=instruction[15], out=pcinc);            // [CU]if a inst pc++ else decide upon jump bits
+		PC(in=outA, reset=reset, load=pcload, inc=pcinc, out[0..14]=pc);                           
+	
+}
